@@ -1,6 +1,0 @@
-framework module Pods_Masiuk2021_Tests {
-  umbrella header "Pods-Masiuk2021_Tests-umbrella.h"
-
-  export *
-  module * { export * }
-}
