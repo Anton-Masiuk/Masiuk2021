@@ -8,26 +8,32 @@
 
 import CoreData
 
+enum articleFetchKeys: String {
+	case title
+	case content
+	case language
+}
+
 // MARK: - Article Manager
 
 public class ArticleManager {
-  
+	
 	// MARK: - Public Properties
 	
 	public static let shared = ArticleManager()
 	
-  // MARK: - Private Properties
-  
+	// MARK: - Private Properties
+	
 	private var managedObjectContext: NSManagedObjectContext
-
+	
 	// MARK: - Public Initializers
 	
 	public init() {
 		guard let modelURL = Bundle(for: ArticleManager.self).url(forResource: Const.ArticleManager.articleModelName,
 																															withExtension: Const.ArticleManager.momdExtension),
-							let articleModel = NSManagedObjectModel(contentsOf: modelURL) else {
+					let articleModel = NSManagedObjectModel(contentsOf: modelURL) else {
 			fatalError(Const.ArticleManager.urlResourceFailMessage)
-				}
+		}
 		let persistentContainer = NSPersistentContainer(name: Const.ArticleManager.articleModelName,
 																										managedObjectModel: articleModel)
 		persistentContainer.loadPersistentStores { (storeDescription, error) in
@@ -38,63 +44,67 @@ public class ArticleManager {
 		self.managedObjectContext = persistentContainer.viewContext
 	}
 	
-  // MARK: - Public Methods
+	// MARK: - Public Methods
 	
-	public func newArticle(title: String, content: String, language: String, image: Data?) -> Article? {
-		let entity = NSEntityDescription.entity(forEntityName: Const.ArticleManager.articleModelName,
-																						in: managedObjectContext)!
-			let article = NSManagedObject(entity: entity, insertInto: managedObjectContext)
-		article.setValue(title, forKey: Const.ArticleManager.articleTitleKey)
-		article.setValue(content, forKey: Const.ArticleManager.articleContentKey)
-		article.setValue(language, forKey: Const.ArticleManager.articleLanguageKey)
-		article.setValue(image, forKey: Const.ArticleManager.articleImageKey)
-		article.setValue(NSDate(), forKey: Const.ArticleManager.articleCreationDateKey)
-		article.setValue(NSDate(), forKey: Const.ArticleManager.articleModificationDateKey)
-			save()
-		return article as? Article
-  }
-  
+	public func newArticle(title: String, content: String, language: String, image: UIImage?) -> Article? {
+		guard let article = NSEntityDescription.insertNewObject(forEntityName: Const.ArticleManager.articleModelName,
+																														into: managedObjectContext) as? Article else { return nil }
+		article.title = title
+		article.content = content
+		article.language = language
+		article.creationDate = Date()
+		article.modificationDate = nil
+		if let imageData = image?.pngData() {
+			article.imageData = imageData
+		}
+		save()
+		return article
+	}
+	
+	
+	public func getAllArticles() -> [Article] {
+		return fetchRequest(key: nil, value: nil)
+	}
+	
 	public func getArticles(with lang: String) -> [Article] {
-		let allArticles = getAllArticles()
-    return allArticles.filter { $0.language == lang }
-  }
-  
+		return fetchRequest(key: .language, value: lang)
+	}
+	
+	public func getArticle(by title: String) -> [Article] {
+		return fetchRequest(key: .title, value: title)
+	}
+	
 	public func getArticles(contain str: String) -> [Article] {
-		let allArticles = getAllArticles()
-    return allArticles.filter {
-      $0.content?.contains(str) ?? false
-    }
-  }
-  
+		return fetchRequest(key: .content, value: str)
+	}
+	
+	
 	public func remove(article: Article) {
 		managedObjectContext.delete(article)
 		save()
-  }
+	}
 	
-	public func getAllArticles() -> [Article] {
-		let request = NSFetchRequest<NSFetchRequestResult>(entityName: Const.ArticleManager.articleModelName)
-		var array: [Article] = []
-		request.returnsObjectsAsFaults = false
-		do {
-			let result = try managedObjectContext.fetch(request)
-			for data in result as! [NSManagedObject] {
-				if let article = data as? Article {
-					array.append(article)
-				}
+	public func save() {
+		if managedObjectContext.hasChanges {
+			do {
+				try managedObjectContext.save()
+			} catch {
+				debugPrint(Const.ArticleManager.saveArticlesFailMessage)
 			}
-		} catch {
-			debugPrint(Const.ArticleManager.loadArticlesFailMessage)
 		}
-	return array
 	}
 	
 	// MARK: - Private Methods
 	
-	private func save() {
-		do {
-				try managedObjectContext.save()
-		} catch {
-			debugPrint(Const.ArticleManager.saveArticlesFailMessage)
+	private func fetchRequest(key: articleFetchKeys?, value: String?) -> [Article] {
+		let request: NSFetchRequest<Article> = Article.fetchRequest()
+		if let key = key, let value = value {
+			request.predicate = NSPredicate(format: "\(key.rawValue) CONTAINS[c] %@", value)
 		}
+		guard let result = try? managedObjectContext.fetch(request) else {
+			debugPrint(Const.ArticleManager.fetchRequestFailMessage)
+			return []
+		}
+		return result
 	}
 }
